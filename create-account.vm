@@ -1,0 +1,196 @@
+$document.surround('/templates/application/surround.vm')
+
+
+## Set Variables del Request
+
+#set($type = $request.get("registration_type"))
+#set($email = $request.get('registration_email'))
+#set($name = $request.get('registration_name'))
+#set($lastname = $request.get('registration_lastname'))
+#set($phone = $request.get('registration_phone'))
+#set($idnumber = $request.get('registration_id'))
+#set($companyname = $request.get('registration_companyname'))
+#set($password = $request.get('password'))
+#set($passwordconfirm = $request.get('passwordconfirm'))
+
+## Crea array vacío  de errores
+#set($errors = [])
+
+## Set URL de origen
+#set($origin = $request.get('origin'))
+
+#if($request.get('registration_name') || $request.get('registration_lastname') || $request.get('password'))
+
+	## Evalua errores
+
+	#if(!$email || !$engine.isValidEmailAddress($email)) #set($void = $errors.add("Debe ingresar un correo electrónico válido.")) #end
+	#if(!$lastname) #set($void = $errors.add("Debe ingresar su apellido."))#end
+	#if(!$name) #set($void = $errors.add("Debe ingresar su nombre."))#end
+	#if(!$password || !$passwordconfirm || ($passwordconfirm != $password)) 
+		#set($void = $errors.add("Debe ingresar una contraseña válida, y debe coincidir con la confirmación."))
+	#end
+	
+	## Evalua tipo de cedula y cantidad de digitos validos
+	#if($type == "01" && $idnumber.length() != 9) $errors.add("El número de cédula debe ser válido, ser ingresado sin guiones y sin dígitos adicionales.") #end
+	#if($type == "02" && $idnumber.length() != 10) $errors.add("El número de cédula debe ser válido, ser ingresado sin guiones y sin dígitos adicionales.") #end
+	#if($type == "03" && $idnumber.length() != 12) $errors.add("El número de cédula debe ser válido, ser ingresado sin guiones y sin dígitos adicionales.") #end
+	
+	## Evalua si ya existe usuario con ese email 
+	#if($email)
+	#if($session.getTable('Customer').getFilteredTable('Email', $email).size() > 0) #set($void = $errors.add("Ya existe una cuenta con esa dirección de correo electrónico.")) #end
+	#end
+
+	## Evalua si ya existe usuario con ese número de cedula 
+	#if($idnumber)
+	#if($session.getTable('Customer').getFilteredTable('Email', $idnumber).size() > 0) #set($void = $errors.add("Ya existe una cuenta con esa cédula de identidad.")) #end
+	#end
+	
+	## Crea usuario nuevo
+	#set($newcustomer = $session.newRecord('Customer'))
+	#if($phone)
+		$newcustomer.putVoid('Phone', $phone)
+	#end
+	$newcustomer.putVoid('Email', $email)
+	$newcustomer.putVoid('Name', $name)
+	$newcustomer.putVoid('Last Name', $lastname)
+	$newcustomer.putVoid('Password', $engine.getMD5encodedString("$password|1"))
+	$newcustomer.putVoid("Id Number", $idnumber)
+	$newcustomer.putVoid("ID Type", $type)
+	
+	#set($save = $newcustomer.save())
+		#if($save)
+			#set($sid = $engine.getMD5encodedString("$newcustomer.get('Token')|$newcustomer.get('Email').substring(0, 4)|1"))
+				#set($uid = $newcustomer.getSingleKeyValue())
+				$session.putVariable("sid", $sid)
+				$session.putVariable("uid", $uid)
+				#set($registermessage = "Su cuenta ha sido creada exitosamente. ")
+						#set($titletext = "¡Bienvenida(o) xxxxx!")
+						#define($contenttext)
+							<h3>Hola $name,</h3>
+							<h4>Bienvenida(o) a xxxxx.</h4>
+							<h4>Gracias por registrarte a nuestra tienda.</h4>	
+						#end
+
+				## Envia Email de Bienvenida		
+				$application.email("info@application.com", "$email, info@application.com", "$titletext", "#parse('/templates/application/emails/template.vm')"))
+				
+				$session.getReplaceScript("/carrito")
+	
+		#end	
+	#end
+	
+#end
+
+        <style>
+            #page-title {
+                top: -120px;
+                margin-bottom: -124px;
+                position: relative;
+                padding: 220px 0 220px 0;
+            }
+
+            section {
+                padding: 30px 0;
+                padding-bottom: 30px;
+                position: relative;
+                width: 100%;
+                overflow: hidden;
+                z-index: 1;
+                background-color: #ffffff;
+            }
+        </style>
+        <section id="page-title" class="text-light"
+            style="background-image:url(/templates/application/img/HeaderComprar2.jpg); background-position:center; background-size: cover;">
+            <div class="container">
+                <div class="breadcrumb">
+                    <ul>
+                    </ul>
+                </div>
+                <div class="page-title">
+                </div>
+            </div>
+        </section>
+        <!-- Create account -->
+        <form action="/crear-cuenta" class="formie">
+
+        <section>
+
+            <div class="container">
+                <div class="row m-b-20">
+                    <div class="col-xs-6 col-lg-6 p-t-10 m-b-0">
+                        <div class="heading-text text-left heading-section">
+                            <h2>CREAR CUENTA</h2>
+                            <h5>¿Ya tiene cuenta? <a href="/iniciar-sesion">Inicie Sesión</a></h5>
+                            <span class="lead"><b>Tipo de Cédula:<b></span>
+                                <select class="form-control col-xl-4 selectcedula m-t-10" name="registration_type">
+                                    <option value="01" selected="selected">Cédula Física</option>
+                                    <option value="03" >Cédula DIMEX</option>
+                                    <option value="02">Cédula Jurídica</option>
+                                </select>
+                        </div>
+                    </div>
+                </div>
+                #if($errors.size() > 0)
+                	<div class="alert alert-warning">
+                		#foreach($error in $errors)
+                			$error
+                		#end
+                	</div>
+                #end
+                <span class="lead"><b>Datos de Contacto:<b></span>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <input type="text" class="form-control" name="registration_name" placeholder="Nombre" value="$!name" required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <input type="text" class="form-control" name="registration_lastname" placeholder="Apellido" value="$!lastname" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <input type="text" class="form-control" name="registration_email" value="$!email" placeholder="Correo Electrónico"
+                            required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <input type="text" class="form-control" name="registration_phone" value="$!phone" placeholder="Teléfono" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <input type="text" class="form-control" name="registration_id" value="$!idnumber" placeholder="Cédula" required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <input type="text" class="form-control razonsocial" style="display:none;" name="registration_companyname" placeholder="Razón Social" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <input type="password" class="form-control" name="password" placeholder="Contraseña" required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <input type="password" class="form-control" name="passwordconfirm" placeholder="Confirmar Contraseña" required>
+                    </div>
+                </div>
+                <button class="btn btn-block col-md-6 submitaction" type="button" style="background-color: #2A795C;">CREAR
+                    CUENTA</button>
+            </div>
+        </section>
+    	</form>
+
+        <!-- end: Create account -->
+
+		## Incluye Codigo al pie del Surround
+	      #define($extrapageplugins)
+		    	$('.selectcedula').on('change', function() {
+				  if($(this).val() == "02"){
+				  	$(".razonsocial").show()
+				  }else{
+				  	$(".razonsocial").hide()
+				  }
+				  console.log($(this).val());
+				});
+				$(".submitaction").on("click", function(){
+				    console.log("Vaina");
+					$(".formie").submit();
+				});
+	      #end
